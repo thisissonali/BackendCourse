@@ -5,22 +5,24 @@
     <title>Document</title>
 </head>
 <link rel="stylesheet" href="styles.css">
-<input>
+<body>
     <!-- <p>Body of html doc <%= locals.name %></p> -->
     <!-- locals.nambo - no err -->
 
     <!-- form creation -->
-    <input>
+    <main>
+    <form method = "post" action = "/contact">
         <label>Name : </label>
-        <input type="text"/>
+        <input type="text" name = "name"/>
 
         <label>Email : </label>
-        <input type="email" />
+        <input type="email" name = "email"/>
 
         <label>Message : </label>
-        <input type="textbox" />
+        <input type="text" name = "Message"/>
 
-        <button type = "button">Send Mail</button>
+        <button type = "submit">Send Mail</button>
     </form> 
+    </main>
 </body>
 </html>
