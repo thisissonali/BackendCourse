@@ -80,77 +80,175 @@ app.get("/getproducts", (req, res) => {
 app.listen(5000, () => {
     console.log("Server is listening on port 5000");
 });
-*/
-import Express from "express";
-import path from 'path'
-import mongoose from "mongoose";
-import 'dotenv/config'
-const app = Express();
-// const user = [];
+    */
+    import Express from "express";
+    import path from 'path'
+    import mongoose from "mongoose";
+    import 'dotenv/config'
+    import cookieParser from "cookie-parser";
+    import  Jwt  from "jsonwebtoken";
+    import bcrypt from "bcrypt";
+    const app = Express();
+    // const user = [];
 
-const DB = process.env.MONGO_URI
+    const DB = process.env.MONGO_URI
 
-mongoose.connect(DB).then(() => {
-    console.log(`connection successful`);
-}).catch((err) => console.log(err));
- 
-
-//Creation of schema
-const mongooseShema = new mongoose.Schema({
-    name: {
-        type: String,
-        required: true,
-    },
-    email: {
-        type: String,
-        required: true,
-    },
-    Message: {
-        type: String, 
-        required : true,
-    }
-})
-
-//creation of model -- collection
-
-const messgeModel = mongoose.model("MessageModel", mongooseShema);
-
-app.use(Express.static(path.join(path.resolve(), "public")));
-app.use(Express.urlencoded({extended: true}));
-//setting up view engine
-app.set("view engine", "ejs");
-
-app.get("/", (req, res) => {
-    console.log(req.body);
-    res.render("index" , {name : "Sonali"});
-});
-
-app.get("/add", async (req, res) => {
-    await messgeModel.create({ name: "Sonali", email: "sonali@gmail.com", Message: "This is a new message" });
-    res.send("Nice");
+    mongoose.connect(DB).then(() => {
+        console.log(`connection successful`);
+    }).catch((err) => console.log(err));
     
-});
 
-app.get("/success", (req, res) => { 
-    res.render("success");
-})
+    //Creation of schema
+    const mongooseShema = new mongoose.Schema({
+        name: {
+            type: String,
+            required: true,
+        },
+        email: {
+            type: String,
+            required: true,
+        },
+        password: {
+            type: String, 
+            required : true,
+        }
+    })
+
+    //creation of model -- collection
+
+    // const messgeModel = mongoose.model("MessageModel", mongooseShema);
+    const User = mongoose.model("User", mongooseShema);
+
+    //setting up middlewares
+    app.use(Express.static(path.join(path.resolve(), "public")));
+    app.use(Express.urlencoded({ extended: true }));
+    app.use(cookieParser())
 
 
-app.post("/contact", async (req, res) => {
-    // console.log(req.body);
-    // user.push({ userName: req.body.name, userEmail: req.body.email, userMessage: req.body.message });
-    // res.send("success");  success string will be displayed on the browser
-    // res.render("success")  succcess file in view will be displayed on the browser
-    const {name , email, Message} = req.body;
-    // const detailsEntered = { userName: req.body.name, userEmail: req.body.email, userMessage: req.body.Message };
-   await messgeModel.create({ name, email, Message});
-    // await messgeModel.create({ name: detailsEntered.userName, email: detailsEntered.userEmail, Message: detailsEntered.userMessage });
-    res.redirect("/success"); // message will be sent to success route
-});
+    //setting up view engine
+    app.set("view engine", "ejs");
 
-app.get("/users", (req, res) => { 
-    res.send(user);
-})
-app.listen(5000, () => {
-    console.log("Server is listening on port 5000");
-});
+    //authentication
+    const isAuthenticated = async (req , res , next) => {
+        const { token } = req.cookies;
+
+        if (token) {
+            const decoded = Jwt.verify(token, "sdfjhdbfjhdfkjdfkj");
+            req.user = await User.findById(decoded._id);
+            next();
+        } else {
+            res.redirect("/login");
+        }
+    }   
+
+    app.get("/", isAuthenticated , (req, res) => {
+
+        res.render("Logout", { name: req.user.name });
+        // res.render("index" , {name : "Sonali"});
+        
+    });
+
+
+    app.get("/login", (req, res) => {
+        res.render("Login");
+    })
+ 
+    app.get("/register", (req, res) => {
+    
+        res.render("register");
+        // res.render("index" , {name : "Sonali"});
+        
+    });
+
+    app.post("/register",async (req, res) => {
+        // res.send("User Logged In SuccessFully");
+
+        const {name , email, password } = req.body;
+        let user = await User.findOne({ email });
+    
+        if (user) {
+            console.log("User already exists , redirecting to Login Page");
+            res.redirect("/login");
+        }
+        const hashedPassword = await bcrypt.hash(password , 10);
+        //otherwise create a new user
+        user = await User.create({
+            name,
+            email,
+            password: hashedPassword,
+        });
+        
+        const token = Jwt.sign({ _id: user._id }, "sdfjhdbfjhdfkjdfkj");
+
+        res.cookie("token", token, {
+            httpOnly: true,
+            expires: new Date(Date.now()+ 60 * 1000)
+        });
+        res.redirect("/login");
+        
+    });
+
+    app.post("/login", async (req, res) => { 
+        const { email, password } = req.body;
+        let user = await User.findOne({ email });
+
+        if (!user) {
+            console.log("No user found with this email, Please register first");
+            return res.redirect("/register");
+        }
+        // console.log(user.password);
+        // console.log(password);
+        // console.log(req.body);
+        // const isMatch = user.password === req.body.password;
+        const isMatch = await bcrypt.compare(password , user.password);
+
+        if (!isMatch) { 
+            return res.render("Login", { email , message: "Incorrect password" });
+        }
+        const token = Jwt.sign({ _id: user._id }, "sdfjhdbfjhdfkjdfkj");
+
+        res.cookie("token", token, {
+            httpOnly: true,
+            expires: new Date(Date.now()+ 60 * 1000)
+        });
+        res.redirect("/");
+    })
+
+
+    app.get("/logout", (req, res) => {
+        res.cookie("token", null, {
+            httpOnly: true,
+            expires: new Date(Date.now())
+        });
+        res.redirect("/")
+    })
+
+    // app.get("/add", async (req, res) => {
+    //     await messgeModel.create({ name: "Sonali", email: "sonali@gmail.com", Message: "This is a new message" });
+    //     res.send("Nice");
+        
+    // });
+
+    // app.get("/success", (req, res) => { 
+    //     res.render("success");
+    // })
+
+
+    // app.post("/contact", async (req, res) => {
+    //     // console.log(req.body);
+    //     // user.push({ userName: req.body.name, userEmail: req.body.email, userMessage: req.body.message });
+    //     // res.send("success");  success string will be displayed on the browser
+    //     // res.render("success")  succcess file in view will be displayed on the browser
+    //     const {name , email, Message} = req.body;
+    //     // const detailsEntered = { userName: req.body.name, userEmail: req.body.email, userMessage: req.body.Message };
+    //    await messgeModel.create({ name, email, Message});
+    //     // await messgeModel.create({ name: detailsEntered.userName, email: detailsEntered.userEmail, Message: detailsEntered.userMessage });
+    //     res.redirect("/success"); // message will be sent to success route
+    // });
+
+    // app.get("/users", (req, res) => { 
+    //     res.send(user);
+    // })
+    app.listen(5000, () => {
+        console.log("Server is listening on port 5000");
+    });
